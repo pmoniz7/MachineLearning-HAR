@@ -1,0 +1,195 @@
+---
+title: "Human Activity Recognition - HAR -  Reconhecimento de Atividades Humanas"
+
+author: "Paulo Moniz"
+
+date: "November 08, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn=-1)
+
+```
+**Introdução**<br/>
+Reconhecimento de Atividades Humanas (HAR) é uma área de pesquisa,  cujos resultados têm o potencial de beneficiar o desenvolvimento de tecnologias assistivas(*) para apoiar os idosos, doentes crónicos e pessoas com necessidades especiais. O reconhecimento de Atividade pode ser usado para fornecer informações sobre as rotinas dos pacientes com a finalidade de apoiar o desenvolvimento de Sistemas de Saúde Eletrônica, como o AAL(Ambient Assisted Living). Duas abordagens são comumente usadas para
+HAR: Processamento de imagem e uso de sensores. Neste projeto usaremos dados coletados de sensores. 
+
+O objetivo deste projeto é analisar o quão bem determinadas atividades físicas são feitas corretamente por pessoas que as fazem regularmente. Está análise está amparada na captação de dados de Sensores (acelerômetros) colocados juntos aos corpos dos 6 participantes da pesquisa. Os acelerômetros foram colocados na cintura, antebraço, braço e no uso de halteres.
+
+O objetivo Principal é construir e treinar um algoritmo através da leitura de um conjunto de dados (dataset) de treinamento (training) para a construção de um modelo que possua alta capacidade preditiva e consiga identicar as respectivas classes (A, B, C, D, E) de forma satisfatória - com 99% ou + de acertos do algoritmo - no dataset correspondente de teste (Testing) com apenas 20 observações.
+ 
+**Descrição das Classes**<br/>
+**A -** Os participantes foram convidados a realizar um conjunto de 10 repetições da Curvatura do Bíceps utilizando o halteres de         forma unilateral.
+    
+**Obs :** Esta Classe (A) indica que a séria de exercícios foi executada corretamente pelos participantes, enquanto que as demais           Classes (B, C, D, E) correspondem a erros comuns durante a execução da série.
+
+**B -** Jogando os cotovelos para a frente.
+
+**C -** Levantando o halteres apenas a meio caminho.
+
+**D -** Abaixando o halteres apenas a meio caminho.
+
+**E -** Jogando os quadris à frente.
+
+**Fonte dos Dados**<br/>
+Os Datasets foram obtidos no seguintes endereços abaixo :
+
+Dataset de Treinamento: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+```{r }
+pml_train <- read.csv("pml-training.csv", sep = ",", header=TRUE)
+
+dim(pml_train)
+
+```
+<br/>
+Dataset Testing (Dataset com 20 linhas), no qual será aplicado o Modelo Preditivo Treinado para verificar a acurácia do mesmo)
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r }
+#Dataset with 20 test cases
+test_cases <- read.csv("pml-testing.csv", sep = ",", header=TRUE)
+dim(test_cases)
+```
+
+<br/>
+Preenchimento com "Na' as  variáveis que contenham  ""  ou  "DIV/0!" em seu conteúdo
+
+```{r }
+pml_train[pml_train == ""] <- NA
+
+pml_train[pml_train == "DIV/0!"] <- NA
+
+```
+<br/>
+Aqui neste ponto são removidas as variáveis que possuem "NA" na maioria das observações.
+
+```{r }
+pml_train <- pml_train[ , apply(pml_train, 2, function(x) !any(is.na(x)))]
+
+dim(pml_train)
+
+names(pml_train)
+
+```
+<br/>
+Remove as variables X, user_name, raw_timestamp_part_1,  raw_timestamp_part_2, cvtd_timestamp, new_window e  num_window já que elas não influem em absolutamente nada no treinamento do modelo preditivo , e que portanto, podem ser removidas tranquilamente.   
+
+```{r }
+pml_train <- pml_train[,c(08:60)]
+
+dim(pml_train)
+
+nrow(pml_train)
+```
+<br/>
+Aqui podemos verificar que as variáveis X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window e  num_window , bem como as que possuiam "NA" na maioria das observações já foram removidas.
+
+```{r }
+table (pml_train$classe)  
+
+```
+
+**Plotando alguns preditores**<br/>
+
+Aqui, eu irei colocar alguns dados para tentar conseguir alguma informação e verificar 
+se há preditores que possam ser excluidos da costrução do modelo. 
+```{r }
+
+library(ggplot2); library(caret)
+
+predictors <- c("accel_arm_x", "accel_arm_y", "accel_arm_z")        
+
+featurePlot(x=pml_train[,predictors],y = pml_train$classe,plot="pairs")
+
+predictors <- c("accel_forearm_x", "accel_forearm_y", "accel_forearm_z")       
+
+featurePlot(x=pml_train[,predictors],y = pml_train$classe,plot="pairs")
+
+qplot(total_accel_arm, total_accel_forearm, colour=classe, data=pml_train)
+
+```
+
+
+```{r }
+set.seed(11014)
+
+inTrain <- createDataPartition(y=pml_train$classe, p=0.75, list=FALSE)
+
+training <- pml_train[inTrain, ]
+
+testing <- pml_train[-inTrain, ]
+
+```
+
+**Modelo Árvore de Decisão (Decision Tree)**
+```{r }
+library(rpart)
+
+model_rpart <- rpart(classe ~ ., data=training, method="class")
+
+pred_rpart  <- predict(model_rpart, training, type = "class")
+
+confusionMatrix(pred_rpart, training$classe)
+```
+
+**Modelo Floresta Aleatória(Random Forest)**
+```{r }
+
+library(randomForest)
+
+model_FR <- randomForest(classe~., data=training, importance = TRUE, ntrees = 3)
+
+pred_FR <- predict(model_FR, training)
+
+confusionMatrix(pred_FR, training$classe)
+
+```
+**Seleção dos Modelos**<br/>
+Para este estudo, procuramos encontrar um algoritmo que melhor classifique as Classes (A, B, C, D, E). A principal idéia é encontrar um algoritmo que trate o problema de classificação (multiclasses) e que, no final, ele seja aplicado em um conjunto de dados com 20 observações que servirá para verificar a acurácia do Modelo Preditivo construído.
+
+O  modelo construído deve ter uma grande precisão, seja executado em um tempo razoável, tratar uma quantidade razoável de variáveis, bem como a alta correlação entre algumas dessas variáveis. Para resolver o problema da classificação multiclasse, foram utilizados dois algoritmos para a construção dos modelos (Tree Decision e Random Forest). 
+
+Finalmente, depois de comparar os dois modelos construidos, escolhi usar o modelo Floresta Aleatória (Random Forest) porque este modelo pode lidar com um grande número de variáveis, com a  alta correlação entre algumas delas e principalmente por ter obtido 99,97% de acurária, enquanto que o Modelo Preditivo construído com o algoritmo Árvore de Decisão (Decision Tree), somente obteve 73,91% de acurácia.  
+
+**Aplicação do Modelo treinado no Dataset de teste (Testing)**
+```{r }
+pred <- predict(model_FR, test_cases)
+
+pred
+
+```
+
+
+##Conclusão 
+Como podemos ver acima, o Modelo treinado funcionou perfeitamente e obteve 100 % de acerto nas classes obtidas quando aplicado sobre o Dataset de teste(Testing).
+
+**___________________________________________________________________________________________________________________________**
+
+***O que é Tecnologia Assistiva?**<br/>
+
+Tecnologia Assistiva é um termo ainda novo, utilizado para identificar todo o arsenal de Recursos e Serviços que contribuem para proporcionar ou ampliar habilidades funcionais de pessoas com deficiência e consequentemente promover Vida Independente e Inclusão.
+
+É também definida como "uma ampla gama de equipamentos, serviços, estratégias e práticas concebidas e aplicadas para minorar os problemas encontrados pelos indivíduos com deficiências" (Cook e Hussey • Assistive Technologies: Principles and Practices • Mosby – Year Book, Inc., 1995).
+
+**Conceito No Brasil**<br/>
+O Comitê de Ajudas Técnicas - CAT, instituído pela PORTARIA N° 142, DE 16 DE NOVEMBRO DE 2006 propõe o seguinte conceito para a tecnologia assistiva:**"Tecnologia Assistiva é uma área do conhecimento, de característica interdisciplinar, que engloba produtos, recursos, metodologias, estratégias, práticas e serviços que objetivam promover a funcionalidade, relacionada à atividade e participação de pessoas com deficiência, incapacidades ou mobilidade reduzida, visando sua autonomia, independência, qualidade de vida e inclusão social"** (ATA VII - Comitê de Ajudas Técnicas (CAT) - Coordenadoria Nacional para Integração da Pessoa Portadora de Deficiência (CORDE) - Secretaria Especial dos Direitos Humanos - Presidência da República).
+
+O termo Assistive Technology, traduzido no Brasil como Tecnologia Assistiva, foi criado em 1988 como importante elemento jurídico dentro da legislação norte-americana conhecida como Public Law 100-407 e foi renovado em 1998 como Assistive Technology Act de 1998 (P.L. 105-394, S.2432). Compõe, com outras leis, o ADA - American with Disabilities Act, que regula os direitos dos cidadãos com deficiência nos EUA, além de prover a base legal dos fundos públicos para compra dos recursos que estes necessitam.
+
+Os Recursos são todo e qualquer item, equipamento ou parte dele, produto ou sistema fabricado em série ou sob medida utilizado para aumentar, manter ou melhorar as capacidades funcionais das pessoas com deficiência. Os Serviços, são definidos como aqueles que auxiliam diretamente uma pessoa com deficiência a selecionar, comprar ou usar os recursos acima definidos.
+
+Recursos
+Podem variar de uma simples bengala a um complexo sistema computadorizado. Estão incluídos brinquedos e roupas adaptadas, computadores, softwares e hardwares especiais, que contemplam questões de acessibilidade, dispositivos para adequação da postura sentada, recursos para mobilidade manual e elétrica, equipamentos de comunicação alternativa, chaves e acionadores especiais, aparelhos de escuta assistida, auxílios visuais, materiais protéticos e milhares de outros itens confeccionados ou disponíveis comercialmente.
+
+Encontramos também terminologias diferentes que aparecem como sinônimos da Tecnologia Assistiva, tais como “Ajudas Técnicas”, “Tecnologia de Apoio“, “Tecnologia Adaptativa” e “Adaptações”.
+
+**Objetivos da Tecnologia Assistiva**<br/>
+
+Proporcionar à pessoa com deficiência maior independência, qualidade de vida e inclusão social, através da ampliação de sua comunicação, mobilidade, controle de seu ambiente, habilidades de seu aprendizado, trabalho e integração com a família, amigos e sociedade.
